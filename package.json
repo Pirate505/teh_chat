@@ -1,0 +1,16 @@
+{
+    "name": "teh_chat",
+    "main": "main.js",
+    "version": "0.1.1",
+    "description": "Sample text",
+    "author": "Pirate505",
+    "license": "MIT",
+    "dependencies": {
+        "socket.io": "latest",
+        "socket.io-client": "latest",
+        "ansi-color": "latest"
+    },
+    "private": true,
+
+
+}
