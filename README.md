@@ -5,3 +5,4 @@ Console client for tehtube.tv chat, powered by node.js+socket.io. All executable
 ### Usage
 
 Enter guest login after connecting, or leave it blank and press Enter. Then, type `/help` in the command line.
+If there are any issues with encoding, try `/reconnect` or restart the programm.
