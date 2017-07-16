@@ -31,10 +31,11 @@ var login = '',
 	pollHistory = [],
 	styles = {highlight: 'black+white_bg', poll: 'bold', err: 'red+bold', pm: 'yellow+bold', ok: 'green+bold'},
 	users = [],
-	conf = {polls: 'full', log: true},
+	conf = {polls: 'compact', log: true},
 	fname = 'tehlog-'+start+'.txt';
 
 var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg};
+
 function completer(line) {
   let completions = users;
   let hits = completions.filter((c) => c.startsWith(line));
@@ -63,13 +64,13 @@ function configWrite(fname, cnf) {
 
 function configRead(fname) {
 	let data = '';
-	let err = fs.accessSync(fname, fs.constants.R_OK | fs.constants.W_OK);
-	if (err) {
+	try {
+		fs.accessSync(fname, fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK);
+	} catch(e) {
 		console_out('[Can\'t access config file! Creating new one]');
-		fs.writeFile(fname, JSON.stringify(conf), 'utf8', (err) => {if (err) console_out(color('[FS_ERR] Config write failed!]', styles.err));});
-  	} else {
-  		data = fs.readFileSync(fname, 'utf8');
+		fs.writeFileSync(fname, JSON.stringify(conf), 'utf8', (err) => {if (err) console_out(color('[FS_ERR] Config write failed!]', styles.err));});
   	}
+  	data = fs.readFileSync(fname, 'utf8');
 	return data;
 }
 
