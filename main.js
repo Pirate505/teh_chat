@@ -3,7 +3,7 @@
 const socket = require('socket.io-client')('https://tehtube.tv:8443');
 const readline = require('readline');
 const color = require("ansi-color").set;
-const ver = '0.1.1';
+const ver = '0.2';
 //process.stdin.setEncoding('utf8');
 //process.stdout.setEncoding('utf8');
 
@@ -28,6 +28,8 @@ var login = '',
 	pollHistory = [],
 	styles = {highlight: 'black+white_bg', poll: 'bold', err: 'red+bold', pm: 'yellow+bold', ok: 'green+bold'},
 	users = [];
+
+var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm};
 
 function completer(line) {
   let completions = users;
@@ -71,13 +73,23 @@ function formatMsg(msg) {
 	return msg;
 }
 
+function getTimestamp(time) {
+	let timestamp = new Date(time).toTimeString().split(" ")[0];
+	return timestamp;
+}
+
 function handleMsg(data) {
-	let timestamp = new Date(data.time).toTimeString().split(" ")[0];
+	let timestamp = getTimestamp(data.time);
 	let msg = formatMsg(data.msg);
 	if (msg.indexOf(login) != -1 && login != '') {msg = color(msg, styles.highlight);}
 	console_out(`>> [${timestamp}] ${data.username}: ${msg}`);
 }
 
+function handlePm(data) {
+	let timestamp = getTimestamp(data.time),
+		msg = formatMsg(data.msg);
+	console_out(color(`[${timestamp}] ${data.username}->${data.to}: ${msg}`, styles.pm));
+}
 
 function getUserIndex(name, list) {
 	if (list.length > 0) {
@@ -94,10 +106,10 @@ function onAfk(data) {
 }
 
 function printPoll(poll, state) {
-	let timestamp = state == 'new' ? new Date(poll.timestamp).toTimeString().split(" ")[0] : new Date().toTimeString().split(" ")[0];
+	let timestamp = state == 'new' ? getTimestamp(poll.timestamp) : new Date().toTimeString().split(" ")[0];
 	switch (state) {
 		case 'new':
-			console_out(color(`>> (${timestamp}) ${poll.initiator} STARTED NEW POLL: ${formatMsg(poll.title)}`, styles.poll));
+			console_out(color(`>> (At ${timestamp}) ${poll.initiator} STARTED NEW POLL: ${formatMsg(poll.title)}`, styles.poll));
 			break;
 		case 'upd':
 			console_out(color(`>> [${timestamp}] POLL UPDATE: ${formatMsg(poll.title)}`, styles.poll));
@@ -169,6 +181,10 @@ function onMsg(data) {
 	handleMsg(data);
 };
 
+function onPm(data) {
+	handlePm(data);
+};
+
 function onErr(data) {
 	console_out(color("[ERR] " + data, styles.err));
 };
@@ -197,7 +213,7 @@ function printUlist(data) {
 function handleCmd(cmd, arg) {
 	switch (cmd) {
 		case 'exit':
-			socket.emit('disconnect', {});
+			socket.disconnect();
 			process.exit();
 			break;
 		case 'ulist':
@@ -232,8 +248,16 @@ function handleCmd(cmd, arg) {
 		case 'help':
 			help();
 			break;
-		case 'test':
-			console_out('Arg: '+ arg);
+		case 'pm':
+			if(arg.length > 2) {
+				let tmp = arg.trim(),
+					sp = tmp.indexOf(' '),
+					to = tmp.slice(0, sp),
+					msg = tmp.slice(sp+1).trim();
+				socket.emit('pm', {to: to, msg: msg});
+			} else {
+				console_out(color('Invalid params!', styles.err))
+			}
 			break;
 		default:
 			console_out('[Command not found]')
@@ -243,7 +267,7 @@ function handleCmd(cmd, arg) {
 };
 
 function help() {
-	console_out(color(` -------------------------------------\nHelp for Teh Chat (${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help\n/exit\n/connect\n/disconnect\n/reconnect\n/ulist\n/login <your_login>\n/afk\n/skip\n ========================\nPress Tab to see all online users\n -------------------------------------`, styles.poll));
+	console_out(color(` -------------------------------------\nHelp for Teh Chat (${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help\n/exit\n/connect\n/disconnect\n/reconnect\n/ulist\n/login <your_login>\n/pm <user> <message>\n/afk\n/skip\n ========================\nPress Tab to see all online users\n -------------------------------------`, styles.poll));
 }
 
 function sendText(text) {
@@ -267,22 +291,16 @@ function guestLogin(l) {
 	}
 };
 
+function initCallbacks(cb) {
+	for (let k in cb) {
+		socket.on(k.toString(), cb[k]);
+	}
+};
 
-socket.on('connect', onConn);
-socket.on('disconnect', onDisconn);
-socket.on('chatMsg', onMsg);
-socket.on('userlist', onUserlist);
-socket.on('usercount', onUcount);
-socket.on('userLeave', onUsrLeave);
-socket.on('newPoll', onPollOpen);
-socket.on('updatePoll', onPollUpd);
-socket.on('closePoll', onPollClose);
-socket.on('setAFK', onAfk);
-socket.on('addUser', onUsrJoin)
-socket.on('error', onErr);
-socket.on('login', onLogin);
+initCallbacks(callbacks);
 
-	guestLogin('');
+guestLogin('');
+
 	rl.on('line', (line) => {
 		if (line[0] == '/' && line.length > 1) {
 			var cmd = line.match(/[a-z]+\b/)[0];
@@ -293,4 +311,5 @@ socket.on('login', onLogin);
 			rl.prompt(true);
 		}
 	});
+
 
