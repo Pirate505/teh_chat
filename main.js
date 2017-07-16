@@ -3,7 +3,8 @@
 const socket = require('socket.io-client')('https://tehtube.tv:8443');
 const readline = require('readline');
 const color = require("ansi-color").set;
-const ver = '0.2';
+const fs = require('fs');
+const ver = '0.3';
 //process.stdin.setEncoding('utf8');
 //process.stdout.setEncoding('utf8');
 
@@ -18,7 +19,9 @@ const logo = `
  / ___// __ \\ / __ '// __/
 / /__ / / / // /_/ // /_  
 \\___//_/ /_/ \\__,_/ \\__/ 
-                              `    
+                              `
+const start = new Date().toString().slice(4, 21).replace(/ /g, '-').replace(/:/g, '-');
+const conf_fname = 'teh_config.json'
 var login = '',
 	connected = false,
 	userlist = {},
@@ -27,14 +30,14 @@ var login = '',
 	currentPoll = {poll: {}, closed: false},
 	pollHistory = [],
 	styles = {highlight: 'black+white_bg', poll: 'bold', err: 'red+bold', pm: 'yellow+bold', ok: 'green+bold'},
-	users = [];
+	users = [],
+	conf = {polls: 'full', log: true},
+	fname = 'tehlog-'+start+'.txt';
 
-var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm};
-
+var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg};
 function completer(line) {
   let completions = users;
   let hits = completions.filter((c) => c.startsWith(line));
-  // show all completions if none found
   return [hits.length ? hits : completions, line];
 }
 
@@ -49,11 +52,49 @@ function console_out(msg) {
     process.stdout.clearLine();
     process.stdout.cursorTo(0);
     console.log(msg);
+    !conf.log || logWrite(msg);
     rl.prompt(true);
 }
 
-console_out(logo);
-console_out('--------------------------------------------------------\nType "/help" for list of commands\n--------------------------------------------------------');
+function configWrite(fname, cnf) {
+	let c = JSON.stringify(cnf);
+	fs.writeFile(conf_fname, c, 'utf8', (err) => {if (err) console_out(color('[FS_ERR] Config write failed!', styles.err));});
+}
+
+function configRead(fname) {
+	let data = '';
+	let err = fs.accessSync(fname, fs.constants.R_OK | fs.constants.W_OK);
+	if (err) {
+		console_out('[Can\'t access config file! Creating new one]');
+		fs.writeFile(fname, JSON.stringify(conf), 'utf8', (err) => {if (err) console_out(color('[FS_ERR] Config write failed!]', styles.err));});
+  	} else {
+  		data = fs.readFileSync(fname, 'utf8');
+  	}
+	return data;
+}
+
+function configInit(fname) {
+	let tmp = configRead(fname);
+	if (tmp.length > 0) {
+		applyConfig(tmp);
+	}
+}
+
+function applyConfig(cnf) {
+	try {
+		let tmpc = JSON.parse(cnf.trim());
+		for (let k in tmpc) {
+			conf[k] = tmpc[k];
+		}
+	} catch(e) {
+		console_out(color(`[ERR] ${e.name}: ${e.message}`), styles.err)
+	}
+}
+
+function logWrite(str) {
+	let tmp = str.replace(/\033\[[0-9]{1,2}m/g, '')+'\n';
+	fs.appendFile(fname, tmp, 'utf8', (err) => {if (err) {console_out(color(`[FS_ERR] ${err}`, styles.err));}});
+}
 
 function formatMsg(msg) {
 	let rep = {"&#39;": "'", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#40;": "(", "&#41;": ")"};
@@ -107,16 +148,32 @@ function onAfk(data) {
 
 function printPoll(poll, state) {
 	let timestamp = state == 'new' ? getTimestamp(poll.timestamp) : new Date().toTimeString().split(" ")[0];
-	switch (state) {
-		case 'new':
-			console_out(color(`>> (At ${timestamp}) ${poll.initiator} STARTED NEW POLL: ${formatMsg(poll.title)}`, styles.poll));
-			break;
-		case 'upd':
-			console_out(color(`>> [${timestamp}] POLL UPDATE: ${formatMsg(poll.title)}`, styles.poll));
-			break;
-		case 'close':
-			console_out(color(`>> [${timestamp}] [POLL CLOSED]`, styles.poll));
-			break;
+	if (conf.polls == 'full' || conf.polls == 'compact') {
+		switch (state) {
+			case 'new':
+				console_out(color(`>> (At ${timestamp}) ${poll.initiator} STARTED NEW POLL: ${formatMsg(poll.title)}`, styles.poll));
+			 	if (conf.polls == 'full' && poll.options.length > 0) {
+			 		for (let i = 0; i < poll.options.length; i++) {
+			 			let opt = formatMsg(poll.options[i]);
+			 			let m = i == poll.options.length-1 ? `   ╚ [${i}] ${opt}: ${poll.counts[i]}` : `   ╠ [${i}] ${opt}: ${poll.counts[i]}`
+			 			console_out(color(m, styles.poll));
+			 		}
+			 	}
+				break;
+			case 'upd':
+				console_out(color(`>> [${timestamp}] POLL UPDATE: ${formatMsg(poll.title)}`, styles.poll));
+				if (conf.polls == 'full' && poll.options.length > 0) {
+			 		for (let i = 0; i < poll.options.length; i++) {
+			 			let opt = formatMsg(poll.options[i]);
+			 			let m = i == poll.options.length-1 ? `   ╚ [${i}] ${opt}: ${poll.counts[i]}` : `   ╠ [${i}] ${opt}: ${poll.counts[i]}`
+			 			console_out(color(m, styles.poll));
+			 		}
+			 	}
+				break;
+			case 'close':
+				console_out(color(`>> [${timestamp}] [POLL CLOSED]`, styles.poll));
+				break;
+		}
 	}
 }
 
@@ -136,6 +193,10 @@ function onPollClose(data) {
 	pollHistory.push(currentPoll)
 	currentPoll = {};
 	printPoll(pollHistory[pollHistory.length-1].poll, 'close');
+}
+
+function onErrMsg(data) {
+	console_out(color(`[ERR]: ${data.msg}`, styles.err))
 }
 
 function onConn() {
@@ -202,7 +263,7 @@ function printUlist(data) {
 	if (data.length > 0) {
 		console_out(`[${ucount}] Userlist:\n --------------------------`);
 		for (let i = 0; i < data.length; i++) {
-			if (data[i] !== undefined) data[i].meta.afk === true ? console_out(`| [afk][${ranks[data[i].rank]}] ${data[i].name}`) : console_out(`| [${ranks[data[i].rank]}] ${data[i].name}`);
+			if (data[i] !== undefined) data[i].meta.afk === true ? console_out(`| [afk][${ranks[data[i].rank]}] ${data[i].name}`) : console_out(`|      [${ranks[data[i].rank]}] ${data[i].name}`);
 		};
 		console_out(' --------------------------');
 	} else {
@@ -259,6 +320,22 @@ function handleCmd(cmd, arg) {
 				console_out(color('Invalid params!', styles.err))
 			}
 			break;
+		case 'vote':
+			if(arg.length > 0) {
+				socket.emit('vote', {option: +arg});
+			}
+			rl.prompt(true);
+			break;
+		case 'config':
+			if (arg.length > 1) {
+				applyConfig(arg);
+				configWrite(conf_fname, conf);
+				rl.prompt(true);
+			} else {
+				console_out('Current config: '+JSON.stringify(conf));
+			}
+
+			break;
 		default:
 			console_out('[Command not found]')
 			rl.prompt(true);
@@ -267,7 +344,7 @@ function handleCmd(cmd, arg) {
 };
 
 function help() {
-	console_out(color(` -------------------------------------\nHelp for Teh Chat (${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help\n/exit\n/connect\n/disconnect\n/reconnect\n/ulist\n/login <your_login>\n/pm <user> <message>\n/afk\n/skip\n ========================\nPress Tab to see all online users\n -------------------------------------`, styles.poll));
+	console_out(color(` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help\n/exit\n/connect\n/disconnect\n/reconnect\n/ulist\n/config [JSON object]\n/login [your_login]\n/pm <user> <message>\n/vote <number_of_option>\n/afk\n/skip\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nProperties: \n "polls": "full|compact|none" - "full" by default\n "log": true|false - enable/disable logging into file\n -------------------------------------`, styles.poll));
 }
 
 function sendText(text) {
@@ -296,6 +373,11 @@ function initCallbacks(cb) {
 		socket.on(k.toString(), cb[k]);
 	}
 };
+
+configInit(conf_fname);
+
+console_out(logo);
+console_out('--------------------------------------------------------\nType "/help" for list of commands\n--------------------------------------------------------');
 
 initCallbacks(callbacks);
 
