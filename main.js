@@ -4,9 +4,7 @@ const socket = require('socket.io-client')('https://tehtube.tv:8443');
 const readline = require('readline');
 const color = require("ansi-color").set;
 const fs = require('fs');
-const ver = '0.3';
-//process.stdin.setEncoding('utf8');
-//process.stdout.setEncoding('utf8');
+const ver = '0.4';
 
 const logo = ` 
   ______ ______ __  __ ______ __  __ ____   ______
@@ -19,9 +17,10 @@ const logo = `
  / ___// __ \\ / __ '// __/
 / /__ / / / // /_/ // /_  
 \\___//_/ /_/ \\__,_/ \\__/ 
-                              `
+                              
+--------------------------------------------------------\nType "/help" for list of commands\n--------------------------------------------------------`;
 const start = new Date().toString().slice(4, 21).replace(/ /g, '-').replace(/:/g, '-');
-const conf_fname = 'teh_config.json'
+const conf_fname = 'teh_config.json';
 var login = '',
 	connected = false,
 	userlist = {},
@@ -31,16 +30,18 @@ var login = '',
 	pollHistory = [],
 	styles = {highlight: 'black+white_bg', poll: 'bold', err: 'red+bold', pm: 'yellow+bold', ok: 'green+bold'},
 	users = [],
-	conf = {polls: 'compact', log: true},
-	fname = 'tehlog-'+start+'.txt';
+	conf = {polls: 'compact', log: true, remember: true, pollfix: true},
+	fname = 'tehlog-'+start+'.txt',
+	pass = '';
 
 var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg};
+var helpstr = ` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help -- show this text\n/exit -- exit the client\n/connect -- connect to the server socket\n/disconnect -- disconnect, lol\n/reconnect -- reconnect?\n/ulist -- show usercount and userlist\n/config [JSON object] -- some configuration, see details below\n/login [your_login] [password] -- log in as a guest or user (if u have registred account) \n/logout - log out from your account\n/pm <user> <message> -- send private message to the user\n/vote <number_of_option> -- vote for something in current poll\n/afk -- afk\n/skip -- vote to skip current video\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nCurrent config: ${JSON.stringify(conf)}\nProperties: \n "polls": "full|compact|none" - "full" by default (must be a string!)\n "log": true|false - enable/disable logging into file\n "remember": true|false - remember your login and password for this session\n "pollfix": true|false - enable/disable all poll updates print\n -------------------------------------`;
 
 function completer(line) {
   let completions = users;
   let hits = completions.filter((c) => c.startsWith(line));
   return [hits.length ? hits : completions, line];
-}
+};
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -55,12 +56,12 @@ function console_out(msg) {
     console.log(msg);
     !conf.log || logWrite(msg);
     rl.prompt(true);
-}
+};
 
 function configWrite(fname, cnf) {
 	let c = JSON.stringify(cnf);
 	fs.writeFile(conf_fname, c, 'utf8', (err) => {if (err) console_out(color('[FS_ERR] Config write failed!', styles.err));});
-}
+};
 
 function configRead(fname) {
 	let data = '';
@@ -72,14 +73,14 @@ function configRead(fname) {
   	}
   	data = fs.readFileSync(fname, 'utf8');
 	return data;
-}
+};
 
 function configInit(fname) {
 	let tmp = configRead(fname);
 	if (tmp.length > 0) {
 		applyConfig(tmp);
 	}
-}
+};
 
 function applyConfig(cnf) {
 	try {
@@ -90,12 +91,12 @@ function applyConfig(cnf) {
 	} catch(e) {
 		console_out(color(`[ERR] ${e.name}: ${e.message}`), styles.err)
 	}
-}
+};
 
 function logWrite(str) {
 	let tmp = str.replace(/\033\[[0-9]{1,2}m/g, '')+'\n';
 	fs.appendFile(fname, tmp, 'utf8', (err) => {if (err) {console_out(color(`[FS_ERR] ${err}`, styles.err));}});
-}
+};
 
 function formatMsg(msg) {
 	let rep = {"&#39;": "'", "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#40;": "(", "&#41;": ")"};
@@ -113,25 +114,25 @@ function formatMsg(msg) {
 
 	}
 	return msg;
-}
+};
 
 function getTimestamp(time) {
 	let timestamp = new Date(time).toTimeString().split(" ")[0];
 	return timestamp;
-}
+};
 
 function handleMsg(data) {
 	let timestamp = getTimestamp(data.time);
 	let msg = formatMsg(data.msg);
 	if (msg.indexOf(login) != -1 && login != '') {msg = color(msg, styles.highlight);}
 	console_out(`>> [${timestamp}] ${data.username}: ${msg}`);
-}
+};
 
 function handlePm(data) {
 	let timestamp = getTimestamp(data.time),
 		msg = formatMsg(data.msg);
 	console_out(color(`[${timestamp}] ${data.username}->${data.to}: ${msg}`, styles.pm));
-}
+};
 
 function getUserIndex(name, list) {
 	if (list.length > 0) {
@@ -140,12 +141,12 @@ function getUserIndex(name, list) {
 		}
 	} 
 	return -1;
-}
+};
 
 function onAfk(data) {
 	let idx = getUserIndex(data.name, userlist);
 	if (idx != -1) userlist[idx].meta.afk = data.afk;
-}
+};
 
 function printPoll(poll, state) {
 	let timestamp = state == 'new' ? getTimestamp(poll.timestamp) : new Date().toTimeString().split(" ")[0];
@@ -176,29 +177,46 @@ function printPoll(poll, state) {
 				break;
 		}
 	}
-}
+};
 
 function onPollOpen(data) {
 	currentPoll.poll = data;
 	currentPoll.closed = false;
 	printPoll(currentPoll.poll, 'new');
-}
+};
+
+function isArrEqual(a, b, strict) {
+	strict = strict || false;
+	if (a.length != b.length) return false;
+	for (let i = 0; i < a.length; i++) {
+		if(strict) {
+			if(a[i] !== b[i]) return false;
+		}
+		if(a[i] != b[i]) return false;
+	}
+	return true;
+};
 
 function onPollUpd(data) {
-	currentPoll.poll = data;
-	printPoll(currentPoll.poll, 'upd');
-}
+	let eq = isArrEqual(currentPoll.poll.counts, data.counts);
+	if (eq && conf.pollfix) {
+		currentPoll.poll = data;
+	} else {
+		currentPoll.poll = data;
+		printPoll(currentPoll.poll, 'upd');
+	} 
+};
 
 function onPollClose(data) {
 	currentPoll.closed = true;
 	pollHistory.push(currentPoll)
 	currentPoll = {};
 	printPoll(pollHistory[pollHistory.length-1].poll, 'close');
-}
+};
 
 function onErrMsg(data) {
 	console_out(color(`[ERR]: ${data.msg}`, styles.err))
-}
+};
 
 function onConn() {
 	console_out(color("[CONNECTED]", styles.ok));
@@ -206,11 +224,15 @@ function onConn() {
     	name: "animach"
 	});
 	connected = true;
+	if (conf.remember && login.length > 1 && pass.length > 1) {
+		socket.emit('login', {name: login, pw: new Buffer(pass, 'base64').toString('utf8')});
+	}
+
 };
 
 function onDisconn(reason) {
 	console_out(color(`[DISCONNECTED]`, styles.err));
-	login = '';
+	if (conf.remember == false || pass.length < 2) login = '';
 };
 
 function onUserlist(data) {
@@ -218,11 +240,11 @@ function onUserlist(data) {
 	for (let i = 0; i < userlist.length; i++) {
 		if (users.indexOf(userlist[i].name) == -1) users.push(userlist[i].name);
 	}
-}
+};
 
 function onUcount(data) {
 	ucount = data;
-}
+};
 
 function onUsrJoin(data) {
 	if (data.name != '') {
@@ -272,6 +294,11 @@ function printUlist(data) {
 	} 
 };
 
+function sockReconnect(time) {
+	socket.disconnect();
+	let r = setTimeout(() => {socket.connect()}, time);
+}
+
 function handleCmd(cmd, arg) {
 	switch (cmd) {
 		case 'exit':
@@ -283,10 +310,15 @@ function handleCmd(cmd, arg) {
 			break;
 		case 'login':
 			if (login.length > 1) {
-				console_out(`[You are logged in as a guest already, ${login}!]`);
+				console_out(`[You are logged in already, ${login}!]`);
 			} else {
-				guestLogin(arg);
+				sockLogin(arg);
 			}
+			break;
+		case 'logout':
+			login = '';
+			pass = '';
+			sockReconnect(500);
 			break;
 		case 'afk':
 			sendText('/afk');
@@ -304,8 +336,7 @@ function handleCmd(cmd, arg) {
 			rl.prompt(true);
 			break;
 		case 'reconnect':
-			socket.disconnect();
-			let r = setTimeout(() => {socket.connect()}, 1000);
+			sockReconnect(1000);
 			break;
 		case 'help':
 			help();
@@ -345,8 +376,8 @@ function handleCmd(cmd, arg) {
 };
 
 function help() {
-	console_out(color(` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help\n/exit\n/connect\n/disconnect\n/reconnect\n/ulist\n/config [JSON object]\n/login [your_login]\n/pm <user> <message>\n/vote <number_of_option>\n/afk\n/skip\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nProperties: \n "polls": "full|compact|none" - "full" by default\n "log": true|false - enable/disable logging into file\n -------------------------------------`, styles.poll));
-}
+	console_out(color(helpstr, styles.poll));
+};
 
 function sendText(text) {
     socket.emit('chatMsg', {
@@ -356,13 +387,25 @@ function sendText(text) {
     rl.prompt(true);
 };
 
-function guestLogin(l) {
-	if (l.length > 1) {
-		socket.emit("login", {name: l});
+function sockLogin(logpass) {
+	if (logpass.length > 1) {
+		logpass = logpass.trim().split(" ");
+		if(logpass.length < 2) {
+			socket.emit("login", {name: logpass[0]});
+		} else {
+			socket.emit("login", {name: logpass[0], pw: logpass[1]});
+			if (conf.remember) pass = new Buffer(logpass[1]).toString('base64');
+		}
 	} else {
-		rl.question("Enter login (leave blank for readonly): ", (_login) => {
-			if (_login != '') {
-				socket.emit("login", {name: _login});
+		rl.question("Enter login or login and password (leave blank for readonly): ", (_logpass) => {
+			if (_logpass.length > 1) {
+				_logpass = _logpass.trim().split(" ");
+				if (_logpass.length < 2) {
+					socket.emit("login", {name: _logpass[0]});
+				} else {
+					socket.emit("login", {name: _logpass[0], pw: _logpass[1]});
+					if (conf.remember) pass = new Buffer(_logpass[1]).toString('base64');
+				}
 			}
 			rl.prompt(true);
 		});
@@ -378,11 +421,10 @@ function initCallbacks(cb) {
 configInit(conf_fname);
 
 console_out(logo);
-console_out('--------------------------------------------------------\nType "/help" for list of commands\n--------------------------------------------------------');
 
 initCallbacks(callbacks);
 
-guestLogin('');
+sockLogin('');
 
 	rl.on('line', (line) => {
 		if (line[0] == '/' && line.length > 1) {
