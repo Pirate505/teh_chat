@@ -4,7 +4,7 @@ const socket = require('socket.io-client')('https://tehtube.tv:8443');
 const readline = require('readline');
 const color = require("ansi-color").set;
 const fs = require('fs');
-const ver = '0.4';
+const ver = '0.5';
 
 const logo = ` 
   ______ ______ __  __ ______ __  __ ____   ______
@@ -19,7 +19,6 @@ const logo = `
 \\___//_/ /_/ \\__,_/ \\__/ 
                               
 --------------------------------------------------------\nType "/help" for list of commands\n--------------------------------------------------------`;
-const start = new Date().toString().slice(4, 21).replace(/ /g, '-').replace(/:/g, '-');
 const conf_fname = 'teh_config.json';
 var login = '',
 	connected = false,
@@ -31,11 +30,13 @@ var login = '',
 	styles = {highlight: 'black+white_bg', poll: 'bold', err: 'red+bold', pm: 'yellow+bold', ok: 'green+bold'},
 	users = [],
 	conf = {polls: 'compact', log: true, remember: true, pollfix: true},
-	fname = 'tehlog-'+start+'.txt',
+	start_date = new Date(),
+	log_date = start_date.toString().slice(4, 15).replace(/ /g, '-').replace(/:/g, '-'),
+	log_name = 'tehlog-'+log_date+'.txt',
 	pass = '';
 
 var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg};
-var helpstr = ` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help -- show this text\n/exit -- exit the client\n/connect -- connect to the server socket\n/disconnect -- disconnect, lol\n/reconnect -- reconnect?\n/ulist -- show usercount and userlist\n/config [JSON object] -- some configuration, see details below\n/login [your_login] [password] -- log in as a guest or user (if u have registred account) \n/logout - log out from your account\n/pm <user> <message> -- send private message to the user\n/vote <number_of_option> -- vote for something in current poll\n/afk -- afk\n/skip -- vote to skip current video\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nCurrent config: ${JSON.stringify(conf)}\nProperties: \n "polls": "full|compact|none" - "full" by default (must be a string!)\n "log": true|false - enable/disable logging into file\n "remember": true|false - remember your login and password for this session\n "pollfix": true|false - enable/disable all poll updates print\n -------------------------------------`;
+var helpstr = ` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help -- show this text\n/exit -- exit the client\n/connect -- connect to the server socket\n/disconnect -- disconnect, lol\n/reconnect -- reconnect?\n/ulist -- show usercount and userlist\n/config [JSON object] -- some configuration, see details below\n/login [your_login] [password] -- log in as a guest or user (if u have registred account) \n/logout - log out from your account\n/pm <user> <message> -- send private message to the user\n/vote <number_of_option> -- vote for something in current poll\n/afk -- afk\n/skip -- vote to skip current video\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nDefault config: ${JSON.stringify(conf)}\nProperties: \n "polls": "full|compact|none" - "full" by default (must be a string!)\n "log": true|false - enable/disable logging into file\n "remember": true|false - remember your login and password for this session\n "pollfix": true|false - enable/disable all poll updates print\n -------------------------------------`;
 
 function completer(line) {
   let completions = users;
@@ -94,8 +95,13 @@ function applyConfig(cnf) {
 };
 
 function logWrite(str) {
-	let tmp = str.replace(/\033\[[0-9]{1,2}m/g, '')+'\n';
-	fs.appendFile(fname, tmp, 'utf8', (err) => {if (err) {console_out(color(`[FS_ERR] ${err}`, styles.err));}});
+	let now = new Date();
+	if (now.getDate != start_date.getDate()) {
+		log_date = now.toString().slice(4, 15).replace(/ /g, '-').replace(/:/g, '-');
+		log_name = 'tehlog-'+log_date+'.txt';
+	}
+	let tmp = str.replace(/\033\[[0-9]{1,2}m/g, '').replace(/^\>\>/, '')+'\n';
+	fs.appendFile(log_name, tmp, 'utf8', (err) => {if (err) {console_out(color(`[FS_ERR] ${err}`, styles.err));}});
 };
 
 function formatMsg(msg) {
