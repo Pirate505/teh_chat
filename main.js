@@ -4,7 +4,7 @@ const socket = require('socket.io-client')('https://tehtube.tv:8443');
 const readline = require('readline');
 const color = require("ansi-color").set;
 const fs = require('fs');
-const ver = '0.5';
+const ver = '0.6';
 
 const logo = ` 
   ______ ______ __  __ ______ __  __ ____   ______
@@ -27,16 +27,16 @@ var login = '',
 	ranks = {0: 'GST', 1: 'USR', 1.5: 'LDR', 2: 'MOD', 3: 'ADM', 4: 'ADM', 10: 'OWN', 255: 'SA'},
 	currentPoll = {poll: {}, closed: false},
 	pollHistory = [],
-	styles = {highlight: 'black+white_bg', poll: 'bold', err: 'red+bold', pm: 'yellow+bold', ok: 'green+bold'},
+	styles = {highlight: 'black+white_bg', poll: 'bold', err: 'red+bold', pm: 'yellow+bold', ok: 'green+bold', usrlog: 'yellow'},
 	users = [],
-	conf = {polls: 'compact', log: true, remember: true, pollfix: true},
+	conf = {polls: 'compact', log: true, remember: true, pollfix: true, usrlog: true},
 	start_date = new Date(),
 	log_date = start_date.toString().slice(4, 15).replace(/ /g, '-').replace(/:/g, '-'),
 	log_name = 'tehlog-'+log_date+'.txt',
 	pass = '';
 
 var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg};
-var helpstr = ` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help -- show this text\n/exit -- exit the client\n/connect -- connect to the server socket\n/disconnect -- disconnect, lol\n/reconnect -- reconnect?\n/ulist -- show usercount and userlist\n/config [JSON object] -- some configuration, see details below\n/login [your_login] [password] -- log in as a guest or user (if u have registred account) \n/logout - log out from your account\n/pm <user> <message> -- send private message to the user\n/vote <number_of_option> -- vote for something in current poll\n/afk -- afk\n/skip -- vote to skip current video\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nDefault config: ${JSON.stringify(conf)}\nProperties: \n "polls": "full|compact|none" - "full" by default (must be a string!)\n "log": true|false - enable/disable logging into file\n "remember": true|false - remember your login and password for this session\n "pollfix": true|false - enable/disable all poll updates print\n -------------------------------------`;
+var helpstr = ` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help -- show this text\n/exit -- exit the client\n/connect -- connect to the server socket\n/disconnect -- disconnect, lol\n/reconnect -- reconnect?\n/ulist -- show usercount and userlist\n/config [JSON object] -- some configuration, see details below\n/login [your_login] [password] -- log in as a guest or user (if u have registred account) \n/logout - log out from your account\n/pm <user> <message> -- send private message to the user\n/vote <number_of_option> -- vote for something in current poll\n/afk -- afk\n/skip -- vote to skip current video\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nDefault config: ${JSON.stringify(conf)}\nProperties: \n "polls": "full|compact|none" - "full" by default (must be a string!)\n "log": true|false - enable/disable logging into file\n "remember": true|false - remember your login and password for this session\n "pollfix": true|false - enable/disable all poll updates print\n "usrlog": true|false - enable/disable user join and leave messages\n -------------------------------------`;
 
 function completer(line) {
   let completions = users;
@@ -253,9 +253,14 @@ function onUcount(data) {
 };
 
 function onUsrJoin(data) {
-	if (data.name != '') {
+	let idx = getUserIndex(data.name, userlist);
+	if (data.name != '' && idx == -1) {
 		userlist.push(data);
 		users.push(data.name);
+		if (conf.usrlog == true) {
+			let timestamp = new Date().toTimeString().split(" ")[0];
+			console_out(color(`[${timestamp}][${data.name} has joined the channel]`, styles.usrlog));
+		}
 	}
 };
 
@@ -265,6 +270,10 @@ function onUsrLeave(data) {
 		delete userlist[idx];
 		delete users[idx];
 	};
+	if (conf.usrlog == true) {
+		let timestamp = new Date().toTimeString().split(" ")[0];
+		console_out(color(`[${timestamp}][${data.name} has left the channel]`, styles.usrlog));
+	}
 };
 
 function onMsg(data) {
