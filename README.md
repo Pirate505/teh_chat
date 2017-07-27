@@ -1,4 +1,4 @@
-## teh chat 0.6
+## teh chat 0.7
 
 Console client for tehtube.tv chat, powered by node.js+socket.io. All executables are built with [pkg](https://github.com/zeit/pkg).
 All dependencies in package.json.
