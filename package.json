@@ -1,7 +1,7 @@
 {
     "name": "teh_chat",
     "main": "main.js",
-    "version": "0.6",
+    "version": "0.7",
     "description": "Sample text",
     "author": "Pirate505",
     "license": "MIT",
