@@ -4,7 +4,7 @@ const socket = require('socket.io-client')('https://tehtube.tv:8443', {transport
 const readline = require('readline');
 const color = require("ansi-color").set;
 const fs = require('fs');
-const ver = '0.8';
+const ver = '0.9';
 const logo = ` 
   ______ ______ __  __ ______ __  __ ____   ______
  /_  __// ____// / / //_  __// / / // __ ) / ____/
@@ -18,10 +18,11 @@ const logo = `
 \\___//_/ /_/ \\__,_/ \\__/ 
                                             (v${ver})
 --------------------------------------------------------\nType "/help" for list of commands\n--------------------------------------------------------`;
+
 const conf_fname = 'teh_config.json';
 var login = '',
 	connected = false,
-	userlist = {},
+	userlist = [],
 	ucount = 0,
 	ranks = {0: 'GST', 1: 'USR', 1.5: 'LDR', 2: 'MOD', 3: 'ADM', 4: 'ADM', 10: 'OWN', 255: 'SA'},
 	currentPoll = {poll: {}, closed: true},
@@ -35,7 +36,7 @@ var login = '',
 	log_name = 'tehlog-'+log_date+'.txt',
 	pass = '';
 
-var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg, 'changeMedia': onChMedia};
+var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg, 'changeMedia': onChMedia, 'setUserRank': onChRank};
 var helpstr = ` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help -- show this text\n/exit -- exit the client\n/now -- shows, whats playing right now, its duration and source type\n/connect -- connect to the server socket\n/disconnect -- disconnect, lol\n/reconnect [delay] -- reconnect?\n/ulist -- show usercount and userlist\n/config [JSON object] -- some configuration, see details below\n/login [your_login] [password] -- log in as a guest or user (if u have registred account) \n/logout - log out from your account\n/pm <user> <message> -- send private message to the user\n/lastpoll -- prints last opened poll \n/vote <number_of_option> -- vote for something in current poll\n/afk -- afk\n/skip -- vote to skip current video\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nDefault config: ${JSON.stringify(conf)}\nProperties: \n "polls": "full|compact|none" - polls display style, "compact" by default (must be a string!)\n "log": true|false - enable/disable logging into file\n "remember": true|false - remember your login and password for this session\n "pollfix": true|false - enable/disable all poll updates print\n "usrlog": true|false - enable/disable user join and leave messages\n "usrlogwrite": true|false - write user join/leave messages to the log\n "cmdlog": true|false - write commands output to the log\n -------------------------------------`;
 
 function completer(line) {
@@ -58,6 +59,14 @@ function console_out(msg, log_write = true) {
     !conf.log || !log_write || logWrite(msg);
     rl.prompt(true);
 };
+
+function deleteByVal(arr, elem) {
+	if (arr.indexOf(elem) !== -1) {
+		return arr.slice(0,arr.indexOf(elem)).concat(arr.slice(arr.indexOf(elem)+1));
+	} else {
+		return arr;
+	}
+}
 
 function configWrite(fname, cnf) {
 	let c = JSON.stringify(cnf);
@@ -117,9 +126,13 @@ function formatMsg(msg) {
 	return msg;
 };
 
-function getTimestamp(time) {
-	let timestamp = new Date(time).toTimeString().split(" ")[0];
-	return timestamp;
+
+function getTimestamp(time = 'now') {
+	if (time !== 'now') {
+		return new Date(time).toTimeString().split(" ")[0];
+	} else {
+		return new Date().toTimeString().split(" ")[0];
+	}
 };
 
 function handleMsg(data) {
@@ -150,7 +163,7 @@ function onAfk(data) {
 };
 
 function printPoll(poll, state) {
-	let timestamp = state == 'new' ? getTimestamp(poll.timestamp) : new Date().toTimeString().split(" ")[0];
+	let timestamp = state == 'new' ? getTimestamp(poll.timestamp) : getTimestamp();
 	if (conf.polls == 'full' || conf.polls == 'compact') {
 		let o = '';
 		if (state != 'close' && poll.options.length > 0) {
@@ -230,6 +243,17 @@ function onConn() {
 
 function onChMedia(data) {
 	media = data;
+};
+
+function onChRank(data) {
+	let idx = getUserIndex(data.name, userlist);
+	if (data.name != '' && idx !== -1) {
+		let oldrank = ranks[userlist[idx].rank],
+			newrank = ranks[data.rank];
+		userlist[idx].rank = data.rank;
+		let timestamp = getTimestamp();
+		!conf.usrlog || console_out(color(`[${timestamp}][${data.name}'s rank has been changed from ${oldrank} to ${newrank}']`, styles.usrlog), conf.usrlogwrite);
+	}
 }
 
 function onDisconn(reason) {
@@ -254,7 +278,7 @@ function onUsrJoin(data) {
 		userlist.push(data);
 		users.push(data.name);
 		if (conf.usrlog == true) {
-			let timestamp = new Date().toTimeString().split(" ")[0];
+			let timestamp = getTimestamp();
 			console_out(color(`[${timestamp}][${data.name} has joined the channel]`, styles.usrlog), conf.usrlogwrite);
 		}
 	}
@@ -262,12 +286,12 @@ function onUsrJoin(data) {
 
 function onUsrLeave(data) {
 	let idx = getUserIndex(data.name, userlist);
-	if (idx !== -1) {
-		delete userlist[idx];
-		delete users[idx];
+	if (idx != -1) {
+		userlist.splice(idx, 1);
+		users = deleteByVal(users, data.name);
 	};
 	if (conf.usrlog == true) {
-		let timestamp = new Date().toTimeString().split(" ")[0];
+		let timestamp = getTimestamp();
 		console_out(color(`[${timestamp}][${data.name} has left the channel]`, styles.usrlog), conf.usrlogwrite);
 	}
 };
@@ -459,5 +483,4 @@ sockLogin('');
 			rl.prompt(true);
 		}
 	});
-
 
