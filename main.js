@@ -4,7 +4,7 @@ const socket = require('socket.io-client')('https://tehtube.tv:8443', {transport
 const readline = require('readline');
 const color = require("ansi-color").set;
 const fs = require('fs');
-const ver = '0.9';
+const ver = '0.9.1';
 const logo = ` 
   ______ ______ __  __ ______ __  __ ____   ______
  /_  __// ____// / / //_  __// / / // __ ) / ____/
@@ -113,16 +113,10 @@ function formatMsg(msg) {
 			msg = msg.replace(key, rep[key]);
 		}
 	};
-	//http[#:/\w.%\-\?=\+]* - links parse
+	//http(s?):\/\/[^\s]+ - links parse regex
+	//http(s?):\/\/[^\s]+?\.(jpg|jpeg|gif|png) - images parse regex
 	msg = msg.replace(/\<[/]*(span|code|a)[^>]*\>/g, '');
-	while(msg.indexOf('img class="chat-picture"') != -1) {
-		let start = msg.indexOf('<img'),
-			src = msg.indexOf('src="')+5,
-			endsrc = msg.indexOf('"', src),
-			end = msg.indexOf('/>')+2;
-
-			msg = msg.slice(0, start) + msg.slice(src, endsrc) + msg.slice(end);
-	}
+	msg = msg.replace(/(<img[\w\s=\"\-]*\")|(" \/>)/g, '');
 	return msg;
 };
 
@@ -252,7 +246,7 @@ function onChRank(data) {
 			newrank = ranks[data.rank];
 		userlist[idx].rank = data.rank;
 		let timestamp = getTimestamp();
-		!conf.usrlog || console_out(color(`[${timestamp}][${data.name}'s rank has been changed from ${oldrank} to ${newrank}']`, styles.usrlog), conf.usrlogwrite);
+		!conf.usrlog || console_out(color(`[${timestamp}][${data.name}'s rank has been changed from ${oldrank} to ${newrank}]`, styles.usrlog), conf.usrlogwrite);
 	}
 }
 
