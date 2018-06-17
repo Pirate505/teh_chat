@@ -1,21 +1,21 @@
 "use strict"
 
-const socket = require('socket.io-client')('https://tehtube.tv:8443', {transportOptions: {polling: {extraHeaders: {'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3'}}}});
+const socket = require('socket.io-client')('https://animach.com:8443', {transportOptions: {polling: {extraHeaders: {'Accept-Language': 'ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3'}}}});
 const readline = require('readline');
 const color = require("ansi-color").set;
 const fs = require('fs');
-const ver = '0.9.1';
+const ver = '0.9.2';
 const logo = ` 
-  ______ ______ __  __ ______ __  __ ____   ______
- /_  __// ____// / / //_  __// / / // __ ) / ____/
-  / /  / __/  / /_/ /  / /  / / / // __  |/ __/   
- / /  / /___ / __  /  / /  / /_/ // /_/ // /___   
-/_/  /_____//_/ /_/  /_/   \\____//_____//_____/   
-         __            __ 
-  _____ / /_   ____ _ / /_ 
- / ___// __ \\ / __ '// __/
-/ /__ / / / // /_/ // /_  
-\\___//_/ /_/ \\__,_/ \\__/ 
+              _______         __     __          __          
+.-----.--.--.|_     _|.-----.|  |--.|  |_.--.--.|  |--.-----.
+|  -__|_   _|  |   |  |  -__||     ||   _|  |  ||  _  |  -__|
+|_____|__.__|  |___|  |_____||__|__||____|_____||_____|_____|
+                                                             
+       __           __                                       
+.----.|  |--.---.-.|  |_                                     
+|  __||     |  _  ||   _|                                    
+|____||__|__|___._||____|                                    
+                  
                                             (v${ver})
 --------------------------------------------------------\nType "/help" for list of commands\n--------------------------------------------------------`;
 
@@ -36,7 +36,7 @@ var login = '',
 	log_name = 'tehlog-'+log_date+'.txt',
 	pass = '';
 
-var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': onMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': onPm, 'errorMsg': onErrMsg, 'changeMedia': onChMedia, 'setUserRank': onChRank};
+var callbacks = {'connect': onConn, 'disconnect': onDisconn, 'chatMsg': handleMsg, 'userlist': onUserlist, 'usercount': onUcount, 'userLeave': onUsrLeave, 'addUser': onUsrJoin, 'newPoll': onPollOpen, 'updatePoll': onPollUpd, 'closePoll': onPollClose, 'setAFK': onAfk, 'error': onErr, 'login': onLogin, 'pm': handlePm, 'errorMsg': onErrMsg, 'changeMedia': onChMedia, 'setUserRank': onChRank};
 var helpstr = ` -------------------------------------\nHelp for Teh Chat (v${ver}) by Pirate505\n -------------------------------------\nSite: github.com/Pirate505/teh_chat/ | tehtube.tv\n ========================\nAvailable commands: \n/help -- show this text\n/exit -- exit the client\n/now -- shows, whats playing right now, its duration and source type\n/connect -- connect to the server socket\n/disconnect -- disconnect, lol\n/reconnect [delay] -- reconnect?\n/ulist -- show usercount and userlist\n/config [JSON object] -- some configuration, see details below\n/login [your_login] [password] -- log in as a guest or user (if u have registred account) \n/logout - log out from your account\n/pm <user> <message> -- send private message to the user\n/lastpoll -- prints last opened poll \n/vote <number_of_option> -- vote for something in current poll\n/afk -- afk\n/skip -- vote to skip current video\n ========================\nPress Tab to see all online users, type "/config" without params to check current config.\nConfig format: {"property1":"val1", "property2":42}\nDefault config: ${JSON.stringify(conf)}\nProperties: \n "polls": "full|compact|none" - polls display style, "compact" by default (must be a string!)\n "log": true|false - enable/disable logging into file\n "remember": true|false - remember your login and password for this session\n "pollfix": true|false - enable/disable all poll updates print\n "usrlog": true|false - enable/disable user join and leave messages\n "usrlogwrite": true|false - write user join/leave messages to the log\n "cmdlog": true|false - write commands output to the log\n -------------------------------------`;
 
 function completer(line) {
@@ -244,9 +244,11 @@ function onChRank(data) {
 	if (data.name != '' && idx !== -1) {
 		let oldrank = ranks[userlist[idx].rank],
 			newrank = ranks[data.rank];
-		userlist[idx].rank = data.rank;
-		let timestamp = getTimestamp();
-		!conf.usrlog || console_out(color(`[${timestamp}][${data.name}'s rank has been changed from ${oldrank} to ${newrank}]`, styles.usrlog), conf.usrlogwrite);
+		if (oldrank != newrank) {
+			userlist[idx].rank = data.rank;
+			let timestamp = getTimestamp();
+			!conf.usrlog || console_out(color(`[${timestamp}][${data.name}'s rank has been changed from ${oldrank} to ${newrank}]`, styles.usrlog), conf.usrlogwrite);
+		}
 	}
 }
 
@@ -288,14 +290,6 @@ function onUsrLeave(data) {
 		let timestamp = getTimestamp();
 		console_out(color(`[${timestamp}][${data.name} has left the channel]`, styles.usrlog), conf.usrlogwrite);
 	}
-};
-
-function onMsg(data) {
-	handleMsg(data);
-};
-
-function onPm(data) {
-	handlePm(data);
 };
 
 function onErr(data) {
@@ -454,6 +448,7 @@ function sockLogin(logpass) {
 };
 
 function initCallbacks(cb) {
+	//initialization of all defined callbacks
 	for (let k in cb) {
 		socket.on(k.toString(), cb[k]);
 	}
