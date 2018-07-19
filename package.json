@@ -1,13 +1,13 @@
 {
     "name": "teh_chat",
     "main": "main.js",
-    "version": "0.7",
+    "version": "0.9.2",
     "description": "Sample text",
     "author": "Pirate505",
     "license": "MIT",
     "dependencies": {
-        "socket.io": ">= 2.0.3",
-        "socket.io-client": ">= 2.0.3",
+        "socket.io": ">=2.0.3",
+        "socket.io-client": ">=2.0.3",
         "ansi-color": "latest"
     },
     "url": "https://github.com/Pirate505/teh_chat/",
