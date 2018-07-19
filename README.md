@@ -5,7 +5,6 @@ All dependencies listed in package.json.
 
 ### Usage
 
-Now with autorization! 
 Enter guest login or login and password after connecting, or leave it blank and press Enter. 
 Then, type `/help` in the command line.
 
